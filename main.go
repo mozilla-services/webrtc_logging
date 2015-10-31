@@ -1,13 +1,13 @@
 package main
 
 import (
-	"compress/gzip"
 	"fmt"
-	"io/ioutil"
+	"mime/multipart"
 	"net/http"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/defaults"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
@@ -22,35 +22,54 @@ import (
 var s3Client *s3.S3
 var uploader *s3manager.Uploader
 
-const logs_bucket = "webrtc_logs"
+const logs_bucket_name = "webrtc-logs"
 
-var RootHandler = func(w http.ResponseWriter, req *http.Request) {
-	fmt.Fprintln(w, "root")
-}
+func handleMultipartForm(req *http.Request, folderName string) (err error) {
+	// 24K allocated for files
+	const _24K = (1 << 20) * 24
+	if err = req.ParseMultipartForm(_24K); err != nil {
+		return
+	}
 
-var DropHandler = func(w http.ResponseWriter, req *http.Request) {
-	if ungzippedBody, err := gzip.NewReader(req.Body); err != nil {
-		http.Error(w, "Could not read logs.", http.StatusInternalServerError)
-	} else {
-		if _, err := ioutil.ReadAll(ungzippedBody); err != nil {
-			http.Error(w, "Could not decode logs.", http.StatusInternalServerError)
-		} else {
-			// generate uuid
-			uuid := uuid.NewV4()
+	for _, fileHeaders := range req.MultipartForm.File {
+		for _, header := range fileHeaders {
+			var file multipart.File
+			if file, err = header.Open(); err != nil {
+				return
+			}
 
-			result, err := uploader.Upload(&s3manager.UploadInput{
-				Bucket:          aws.String(logs_bucket),
-				Key:             aws.String(fmt.Sprintf("%s-%s", uuid, time.Now().Format(time.RFC3339))),
-				Body:            req.Body,
+			var result *s3manager.UploadOutput
+			result, err = uploader.Upload(&s3manager.UploadInput{
+				Bucket:          aws.String(logs_bucket_name),
+				Key:             aws.String(fmt.Sprintf("%s/%s", folderName, header.Filename)),
+				Body:            file,
 				ContentEncoding: aws.String("gzip"),
 			})
 			if err != nil {
-				http.Error(w, fmt.Sprintf("Could not upload logs. Error: %s", err), http.StatusInternalServerError)
-			} else {
-				fmt.Fprintln(w, fmt.Sprintf("Upload success, uuid: %, result: %s", uuid, result))
+				return
 			}
+			fmt.Println("result", result)
 		}
 	}
+	return
+}
+
+var uploadHandler = func(w http.ResponseWriter, req *http.Request) {
+	// generate uuid and time for folder name
+	id := uuid.NewV4()
+	timestamp := time.Now().Format(time.RFC3339)
+
+	err := handleMultipartForm(req, fmt.Sprintf("%s-%s", timestamp, id))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Could not upload logs. Error: %s", err), http.StatusInternalServerError)
+	} else {
+		fmt.Fprintln(w, fmt.Sprintf("Upload success. <a href=\"%s\" target=\"_blank\">Copy this url.</a>",
+			"http://"))
+	}
+}
+
+var viewHandler = func(w http.ResponseWriter, req *http.Request) {
+	fmt.Fprintln(w, "root")
 }
 
 var DeniedFunction = func(w http.ResponseWriter, req *http.Request) {
@@ -64,14 +83,28 @@ func init() {
 	// s3
 	s3Client = s3.New(nil)
 
-	// make sure bucket exists
-	result, err := s3Client.CreateBucket(&s3.CreateBucketInput{
-		Bucket: aws.String(logs_bucket),
+	// check for logs_bucket existence
+	_, err := s3Client.HeadBucket(&s3.HeadBucketInput{
+		Bucket: aws.String(logs_bucket_name),
 	})
+
+	// if there was an error, it is likely that the logs_bucket doesn't exist
 	if err != nil {
+		if reqErr, ok := err.(awserr.RequestFailure); ok {
+			// service error occurred
+			if reqErr.StatusCode() == 404 {
+				// bucket not found -> create the bucket
+				_, err := s3Client.CreateBucket(&s3.CreateBucketInput{
+					Bucket: aws.String(logs_bucket_name),
+				})
+				if err != nil {
+					panic(err)
+				}
+				return
+			}
+		}
 		panic(err)
 	}
-	fmt.Println(result.GoString())
 }
 
 func main() {
@@ -80,10 +113,9 @@ func main() {
 
 	// gorilla mux
 	router := mux.NewRouter().StrictSlash(false)
-	router.HandleFunc("/", RootHandler)
-	router.HandleFunc("/drop", DropHandler).
-		Methods("POST").
-		HeadersRegexp("Content-Type", "application/gzip")
+	router.HandleFunc("/", uploadHandler).
+		Methods("POST")
+	router.HandleFunc("/view/", viewHandler)
 
 	// negroni
 	neg := negroni.Classic()
