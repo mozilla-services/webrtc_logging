@@ -17,7 +17,6 @@ import:
   #  # the VCS type (compare to bzr, hg, svn). You should
   #  # set this if you know it.
   #  vcs: git
-  import:
   - package: github.com/go-zoo/bone
     version: 861b03028e1b30a532649b69bded364b410b7f71
   - package: github.com/satori/go.uuid
