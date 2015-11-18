@@ -11,13 +11,13 @@ import (
 	"github.com/aws/aws-sdk-go/aws/defaults"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	bucketlister "github.com/mozilla-services/product-delivery-tools/bucketlister/services"
-	"github.com/satori/go.uuid"
 
 	"github.com/codegangsta/negroni"
-	"github.com/gorilla/mux"
+	"github.com/go-zoo/bone"
 	negroni_gzip "github.com/phyber/negroni-gzip/gzip"
-	"github.com/xyproto/permissions2"
+
+	bucketlister "github.com/mozilla-services/product-delivery-tools/bucketlister/services"
+	"github.com/satori/go.uuid"
 )
 
 var s3Client *s3.S3
@@ -50,7 +50,7 @@ func handleMultipartForm(req *http.Request, folderName string) (err error) {
 			if err != nil {
 				return
 			}
-			fmt.Println("result", result)
+			fmt.Println("upload success: ", result.Location)
 		}
 	}
 	return
@@ -61,7 +61,7 @@ var uploadHandler = func(w http.ResponseWriter, req *http.Request) {
 	id := uuid.NewV4()
 	timestamp := time.Now().Format(time.RFC3339)
 
-	folderName := fmt.Sprintf("%s-%s", timestamp, id)
+	folderName := timestamp + "-" + id.String()
 
 	err := handleMultipartForm(req, folderName)
 	if err != nil {
@@ -72,12 +72,10 @@ var uploadHandler = func(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-var viewHandler = func(w http.ResponseWriter, req *http.Request) {
+var bucketlisterHandler = func(w http.ResponseWriter, req *http.Request) {
+	id := bone.GetValue(req, "id")
+	fmt.Printf("id: " + id)
 	rootLister.ServeHTTP(w, req)
-}
-
-var deniedFunction = func(w http.ResponseWriter, req *http.Request) {
-	http.Error(w, "Permission denied!", http.StatusForbidden)
 }
 
 func init() {
@@ -97,13 +95,14 @@ func init() {
 		if reqErr, ok := err.(awserr.RequestFailure); ok {
 			// service error occurred
 			if reqErr.StatusCode() == 404 {
+				// bucket should be created in cloudformation, so this is obsolete
 				// bucket not found -> create the bucket
-				_, err := s3Client.CreateBucket(&s3.CreateBucketInput{
-					Bucket: aws.String(logsBucketName),
-				})
-				if err != nil {
-					panic(err)
-				}
+				// _, err := s3Client.CreateBucket(&s3.CreateBucketInput{
+				// 	Bucket: aws.String(logsBucketName),
+				// })
+				// if err != nil {
+				// 	panic(err)
+				// }
 				return
 			}
 		}
@@ -122,25 +121,15 @@ func main() {
 	// s3
 	uploader = s3manager.NewUploader(nil)
 
-	// gorilla mux
-	router := mux.NewRouter().StrictSlash(false)
-	router.HandleFunc("/", uploadHandler).
-		Methods("POST")
-	router.HandleFunc("/", viewHandler).
-		Methods("GET")
+	// bone mux
+	router := bone.New()
+	router.GetFunc("/*/$", bucketlisterHandler)
+	router.PostFunc("/", uploadHandler)
 
 	// negroni
 	neg := negroni.Classic()
 
-	// middleware instantiations
-	// requires redis, default port is 6379
-	perm := permissions.New()
-
-	// Custom handler for when permissions are denied
-	perm.SetDenyFunction(deniedFunction)
-
 	// middleware
-	neg.Use(perm)
 	neg.Use(negroni_gzip.Gzip(negroni_gzip.DefaultCompression))
 
 	// handlers
