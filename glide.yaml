@@ -1,0 +1,34 @@
+# Glide YAML configuration file
+# Set this to your fully qualified package name, e.g.
+# github.com/Masterminds/foo. This should be the
+# top level package.
+package: github.com/milescrabill/webrtc_logging
+
+# Declare your project's dependencies.
+import:
+  # Fetch package similar to 'go get':
+  #- package: github.com/Masterminds/cookoo
+  # Get and manage a package with Git:
+  #- package: github.com/Masterminds/cookoo
+  #  # The repository URL
+  #  repo: git@github.com:Masterminds/cookoo.git
+  #  # A tag, branch, or SHA
+  #  ref: 1.1.0
+  #  # the VCS type (compare to bzr, hg, svn). You should
+  #  # set this if you know it.
+  #  vcs: git
+  import:
+  - package: github.com/go-zoo/bone
+    version: 861b03028e1b30a532649b69bded364b410b7f71
+  - package: github.com/satori/go.uuid
+    version: d41af8bb6a7704f00bc3b7cba9355ae6a5a80048
+  - package: github.com/mozilla-services/product-delivery-tools
+    version: 9fd9627a56afff1cb1e8baba848c7ef0ef1f95d4
+  - package: github.com/aws/aws-sdk-go
+    version: 8e2b65e861d9dece1929689b10ae8cabf4227601
+  - package: github.com/vaughan0/go-ini
+    version: a98ad7ee00ec53921f08832bc06ecf7fd600e6a1
+  - package: github.com/codegangsta/negroni
+    version: c7477ad8e330bef55bf1ebe300cf8aa67c492d1b
+  - package: github.com/phyber/negroni-gzip
+    version: 1211b7a0892223f5b3f1af8629ea6c3d9f984028
