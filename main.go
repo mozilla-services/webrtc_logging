@@ -123,7 +123,7 @@ func main() {
 
 	// bone mux
 	router := bone.New()
-	router.GetFunc("/*/$", bucketlisterHandler)
+	router.GetFunc("/*", bucketlisterHandler)
 	router.PostFunc("/", uploadHandler)
 
 	// negroni
