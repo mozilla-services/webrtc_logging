@@ -1,7 +1,11 @@
 package main
 
 import (
+	"crypto/tls"
+	"flag"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"time"
@@ -13,20 +17,31 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 
 	"github.com/codegangsta/negroni"
+	"github.com/gorilla/mux"
 	negroni_gzip "github.com/phyber/negroni-gzip/gzip"
 
-	"github.com/gorilla/mux"
-
+	"github.com/Masterminds/glide/vendor/gopkg.in/yaml.v2"
 	uuid "github.com/satori/go.uuid"
 
+	"github.com/mozilla-services/mozldap"
 	bucketlister "github.com/mozilla-services/product-delivery-tools/bucketlister/services"
 )
 
 var s3Client *s3.S3
+var ldapClient mozldap.Client
 var uploader *s3manager.Uploader
 var rootLister *bucketlister.BucketLister
 
+var config = flag.String("c", "config.yaml", "Load configuration from file")
+
 const logsBucketName = "webrtc-logs"
+
+type conf struct {
+	Ldap struct {
+		Uri, Username, Password string
+		Insecure, Starttls      bool
+	}
+}
 
 func handleMultipartForm(req *http.Request, folderName string) (err error) {
 	// 24K allocated for files
@@ -83,6 +98,37 @@ var bucketlisterHandler = func(w http.ResponseWriter, req *http.Request) {
 }
 
 func init() {
+	flag.Parse()
+
+	// load the local configuration file
+	fd, err := ioutil.ReadFile(*config)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// ldap conf
+	var conf conf
+
+	err = yaml.Unmarshal(fd, &conf)
+	if err != nil {
+		log.Fatalf("error: %v", err)
+	}
+
+	log.Printf("%v", conf)
+
+	// instantiate an ldap client
+	ldapClient, err = mozldap.NewClient(
+		conf.Ldap.Uri,
+		conf.Ldap.Username,
+		conf.Ldap.Password,
+		&tls.Config{InsecureSkipVerify: conf.Ldap.Insecure},
+		conf.Ldap.Starttls)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("connected %s on %s:%d, tls:%v starttls:%v\n", ldapClient.BaseDN, ldapClient.Host, ldapClient.Port, ldapClient.UseTLS, ldapClient.UseStartTLS)
+
 	// default aws region
 	defaults.DefaultConfig.Region = aws.String("us-west-2")
 
@@ -90,7 +136,7 @@ func init() {
 	s3Client = s3.New(nil)
 
 	// check for logs_bucket existence
-	_, err := s3Client.HeadBucket(&s3.HeadBucketInput{
+	_, err = s3Client.HeadBucket(&s3.HeadBucketInput{
 		Bucket: aws.String(logsBucketName),
 	})
 
@@ -128,9 +174,9 @@ func main() {
 	// bone mux
 	// router := bone.New()
 	router := mux.NewRouter()
-	// router.GetFunc(".*[^\\.]", bucketlisterHandler)
-	router.HandleFunc("^/.*\\.[^/]+$", testHandler)
-	router.HandleFunc("/", uploadHandler)
+	router.HandleFunc(".*[^\\.]", bucketlisterHandler).Methods("GET")
+	router.HandleFunc("^/.*\\.[^/]+$", testHandler).Methods("GET")
+	router.HandleFunc("/", uploadHandler).Methods("POST")
 
 	// negroni
 	neg := negroni.Classic()
