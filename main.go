@@ -13,11 +13,13 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 
 	"github.com/codegangsta/negroni"
-	"github.com/go-zoo/bone"
 	negroni_gzip "github.com/phyber/negroni-gzip/gzip"
 
+	"github.com/gorilla/mux"
+
+	uuid "github.com/satori/go.uuid"
+
 	bucketlister "github.com/mozilla-services/product-delivery-tools/bucketlister/services"
-	"github.com/satori/go.uuid"
 )
 
 var s3Client *s3.S3
@@ -56,6 +58,10 @@ func handleMultipartForm(req *http.Request, folderName string) (err error) {
 	return
 }
 
+var testHandler = func(w http.ResponseWriter, req *http.Request) {
+	fmt.Fprintln(w, "test")
+}
+
 var uploadHandler = func(w http.ResponseWriter, req *http.Request) {
 	// generate uuid and time for folder name
 	id := uuid.NewV4()
@@ -73,8 +79,6 @@ var uploadHandler = func(w http.ResponseWriter, req *http.Request) {
 }
 
 var bucketlisterHandler = func(w http.ResponseWriter, req *http.Request) {
-	id := bone.GetValue(req, "id")
-	fmt.Printf("id: " + id)
 	rootLister.ServeHTTP(w, req)
 }
 
@@ -122,9 +126,11 @@ func main() {
 	uploader = s3manager.NewUploader(nil)
 
 	// bone mux
-	router := bone.New()
-	router.GetFunc("/*", bucketlisterHandler)
-	router.PostFunc("/", uploadHandler)
+	// router := bone.New()
+	router := mux.NewRouter()
+	// router.GetFunc(".*[^\\.]", bucketlisterHandler)
+	router.HandleFunc("^/.*\\.[^/]+$", testHandler)
+	router.HandleFunc("/", uploadHandler)
 
 	// negroni
 	neg := negroni.Classic()
