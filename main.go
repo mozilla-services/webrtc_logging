@@ -23,8 +23,8 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"gopkg.in/yaml.v2"
 
+	bucketlister "github.com/milescrabill/product-delivery-tools"
 	"github.com/mozilla-services/mozldap"
-	bucketlister "github.com/mozilla-services/product-delivery-tools/bucketlister/services"
 )
 
 var s3Client *s3.S3
