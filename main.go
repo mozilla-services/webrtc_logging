@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/defaults"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 
@@ -23,7 +23,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"gopkg.in/yaml.v2"
 
-	bucketlister "github.com/milescrabill/product-delivery-tools"
+	bucketlister "github.com/milescrabill/product-delivery-tools/bucketlister/services"
 	"github.com/mozilla-services/mozldap"
 )
 
@@ -129,11 +129,11 @@ func init() {
 
 	log.Printf("connected %s on %s:%d, tls:%v starttls:%v\n", ldapClient.BaseDN, ldapClient.Host, ldapClient.Port, ldapClient.UseTLS, ldapClient.UseStartTLS)
 
-	// default aws region
-	defaults.DefaultConfig.Region = aws.String("us-west-2")
+	region := "us-west-2"
+	sess := session.New(&aws.Config{Region: aws.String(region)})
 
 	// s3
-	s3Client = s3.New(nil)
+	s3Client = s3.New(sess)
 
 	// check for logs_bucket existence
 	_, err = s3Client.HeadBucket(&s3.HeadBucketInput{

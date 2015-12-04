@@ -18,28 +18,15 @@ import:
   #  # set this if you know it.
   #  vcs: git
   - package: github.com/gorilla/mux
-    version: 9c068cf16d982f8bd444b8c352acbeec34c4fe5b
   - package: gopkg.in/ldap.v2
-    version: e9a325d64989e2844be629682cb085d2c58eef8d
-  - package: gopkg.in/yaml.v2
-    version: f7716cbe52baa25d2e9b0d0da546fcf909fc16b4
-  - package: github.com/satori/go.uuid
-    version: d41af8bb6a7704f00bc3b7cba9355ae6a5a80048
-  - package: github.com/mozilla-services/mozldap
-    version: df5434b2386ebbd37e9ef435313d379c71566fea
-  - package: github.com/aws/aws-sdk-go
-    version: d4677067b535e7a06201ce491b41f4b73dcc73a9
-  - package: github.com/mozilla-services/product-delivery-tools
-    version: 9fd9627a56afff1cb1e8baba848c7ef0ef1f95d4
-  - package: github.com/gorilla/context
-    version: 1c83b3eabd45b6d76072b66b746c20815fb2872d
-  - package: gopkg.in/asn1-ber.v1
-    version: 4e86f4367175e39f69d9358a5f17b4dda270378d
-  - package: github.com/phyber/negroni-gzip
-    version: 1211b7a0892223f5b3f1af8629ea6c3d9f984028
-  - package: github.com/Masterminds/glide
-    version: 016de10b1f06b06ebf53bbc1c23b00989e8532e2
+  - package: github.com/jmespath/go-jmespath
   - package: github.com/codegangsta/negroni
-    version: c7477ad8e330bef55bf1ebe300cf8aa67c492d1b
-  - package: github.com/vaughan0/go-ini
-    version: a98ad7ee00ec53921f08832bc06ecf7fd600e6a1
+  - package: github.com/mozilla-services/mozldap
+  - package: github.com/phyber/negroni-gzip
+  - package: github.com/aws/aws-sdk-go
+  - package: github.com/gorilla/context
+  - package: github.com/milescrabill/product-delivery-tools
+  - package: github.com/satori/go.uuid
+  - package: gopkg.in/yaml.v2
+  - package: gopkg.in/asn1-ber.v1
+  - package: github.com/go-ini/ini
