@@ -20,8 +20,8 @@ import (
 	"github.com/gorilla/mux"
 	negroni_gzip "github.com/phyber/negroni-gzip/gzip"
 
-	"github.com/Masterminds/glide/vendor/gopkg.in/yaml.v2"
 	uuid "github.com/satori/go.uuid"
+	"gopkg.in/yaml.v2"
 
 	"github.com/mozilla-services/mozldap"
 	bucketlister "github.com/mozilla-services/product-delivery-tools/bucketlister/services"
