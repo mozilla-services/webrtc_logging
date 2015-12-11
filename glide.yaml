@@ -17,16 +17,15 @@ import:
   #  # the VCS type (compare to bzr, hg, svn). You should
   #  # set this if you know it.
   #  vcs: git
-  - package: github.com/gorilla/mux
-  - package: gopkg.in/ldap.v2
-  - package: github.com/jmespath/go-jmespath
-  - package: github.com/codegangsta/negroni
-  - package: github.com/mozilla-services/mozldap
-  - package: github.com/phyber/negroni-gzip
-  - package: github.com/aws/aws-sdk-go
   - package: github.com/gorilla/context
   - package: github.com/milescrabill/product-delivery-tools
-  - package: github.com/satori/go.uuid
-  - package: gopkg.in/yaml.v2
-  - package: gopkg.in/asn1-ber.v1
+  - package: github.com/mozilla-services/mozldap
   - package: github.com/go-ini/ini
+  - package: github.com/jmespath/go-jmespath
+  - package: github.com/satori/go.uuid
+  - package: github.com/gorilla/mux
+  - package: github.com/codegangsta/negroni
+  - package: github.com/aws/aws-sdk-go
+  - package: gopkg.in/ldap.v2
+  - package: gopkg.in/asn1-ber.v1
+  - package: gopkg.in/yaml.v2

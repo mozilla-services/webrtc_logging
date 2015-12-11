@@ -11,39 +11,42 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/gorilla/mux"
+
+	"crypto/x509"
 
 	"github.com/codegangsta/negroni"
-	"github.com/gorilla/mux"
-	negroni_gzip "github.com/phyber/negroni-gzip/gzip"
-
+	"github.com/milescrabill/mozldap"
+	bucketlister "github.com/milescrabill/product-delivery-tools/bucketlister/services"
 	uuid "github.com/satori/go.uuid"
 	"gopkg.in/yaml.v2"
-
-	bucketlister "github.com/milescrabill/product-delivery-tools/bucketlister/services"
-	"github.com/mozilla-services/mozldap"
 )
 
+var sess *session.Session
 var s3Client *s3.S3
 var ldapClient mozldap.Client
 var uploader *s3manager.Uploader
 var rootLister *bucketlister.BucketLister
+var conf Config
 
-var config = flag.String("c", "config.yaml", "Load configuration from file")
-
-const logsBucketName = "webrtc-logs"
-
-type conf struct {
+type Config struct {
 	Ldap struct {
-		Uri, Username, Password string
-		Insecure, Starttls      bool
+		Uri, Username, Password, ClientCertFile, ClientKeyFile, CaCertFile string
+		Insecure, Starttls                                                 bool
+	}
+	S3 struct {
+		BucketName, Region string
+	}
+	Server struct {
+		URI string
 	}
 }
 
-func handleMultipartForm(req *http.Request, folderName string) (err error) {
+func handleMultipartForm(req *http.Request, folderName string) (url string, err error) {
 	// 24K allocated for files
 	const _24K = (1 << 20) * 24
 	if err = req.ParseMultipartForm(_24K); err != nil {
@@ -57,9 +60,8 @@ func handleMultipartForm(req *http.Request, folderName string) (err error) {
 				return
 			}
 
-			var result *s3manager.UploadOutput
-			result, err = uploader.Upload(&s3manager.UploadInput{
-				Bucket:          aws.String(logsBucketName),
+			_, err = uploader.Upload(&s3manager.UploadInput{
+				Bucket:          aws.String(conf.S3.BucketName),
 				Key:             aws.String(fmt.Sprintf("%s/%s", folderName, header.Filename)),
 				Body:            file,
 				ContentEncoding: aws.String("gzip"),
@@ -67,14 +69,28 @@ func handleMultipartForm(req *http.Request, folderName string) (err error) {
 			if err != nil {
 				return
 			}
-			fmt.Println("upload success: ", result.Location)
 		}
 	}
+	url = conf.Server.URI + folderName + "/"
+	log.Printf("upload success: %s", url)
 	return
 }
 
-var testHandler = func(w http.ResponseWriter, req *http.Request) {
-	fmt.Fprintln(w, "test")
+var downloadFileHandler = func(w http.ResponseWriter, req *http.Request) {
+	vars := mux.Vars(req)
+	bucketName := vars["dir"]
+	fileName := vars["file"]
+	s3req, _ := s3Client.GetObjectRequest(&s3.GetObjectInput{
+		Bucket: aws.String(conf.S3.BucketName),
+		Key:    aws.String(bucketName + "/" + fileName),
+	})
+
+	presigned, err := s3req.Presign(time.Minute * 10)
+	if err != nil {
+		http.Error(w, err.Error(), 503)
+	}
+
+	http.Redirect(w, req, presigned, 307)
 }
 
 var uploadHandler = func(w http.ResponseWriter, req *http.Request) {
@@ -84,60 +100,76 @@ var uploadHandler = func(w http.ResponseWriter, req *http.Request) {
 
 	folderName := timestamp + "-" + id.String()
 
-	err := handleMultipartForm(req, folderName)
+	url, err := handleMultipartForm(req, folderName)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Could not upload logs. Error: %s", err), http.StatusInternalServerError)
 	} else {
-		fmt.Fprintln(w, fmt.Sprintf("Upload success. <a href=\"%s\" target=\"_blank\">Copy this url.</a>",
-			"http://"))
+		fmt.Fprintln(w, url)
 	}
-}
-
-var bucketlisterHandler = func(w http.ResponseWriter, req *http.Request) {
-	rootLister.ServeHTTP(w, req)
 }
 
 func init() {
 	flag.Parse()
 
+	if flag.NArg() != 1 {
+		log.Panic("Missing configuration path.")
+	}
+
 	// load the local configuration file
-	fd, err := ioutil.ReadFile(*config)
+	fd, err := ioutil.ReadFile(flag.Arg(0))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// ldap conf
-	var conf conf
-
+	// configuration object
 	err = yaml.Unmarshal(fd, &conf)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
 
-	log.Printf("%v", conf)
+	// import the client certificates
+	cert, err := tls.LoadX509KeyPair(conf.Ldap.ClientCertFile, conf.Ldap.ClientKeyFile)
+	if err != nil {
+		panic(err)
+	}
+
+	// import the ca cert
+	ca := x509.NewCertPool()
+	CAcert, err := ioutil.ReadFile(conf.Ldap.CaCertFile)
+	if err != nil {
+		panic(err)
+	}
+
+	if ok := ca.AppendCertsFromPEM(CAcert); !ok {
+		panic("failed to import CA Certificate")
+	}
+
+	tlsConfig := tls.Config{
+		Certificates:       []tls.Certificate{cert},
+		RootCAs:            ca,
+		InsecureSkipVerify: true,
+	}
 
 	// instantiate an ldap client
 	ldapClient, err = mozldap.NewClient(
 		conf.Ldap.Uri,
 		conf.Ldap.Username,
 		conf.Ldap.Password,
-		&tls.Config{InsecureSkipVerify: conf.Ldap.Insecure},
+		&tlsConfig,
 		conf.Ldap.Starttls)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	log.Printf("connected %s on %s:%d, tls:%v starttls:%v\n", ldapClient.BaseDN, ldapClient.Host, ldapClient.Port, ldapClient.UseTLS, ldapClient.UseStartTLS)
-
-	region := "us-west-2"
-	sess := session.New(&aws.Config{Region: aws.String(region)})
+	sess = session.New(&aws.Config{Region: aws.String(conf.S3.Region)})
 
 	// s3
 	s3Client = s3.New(sess)
 
 	// check for logs_bucket existence
 	_, err = s3Client.HeadBucket(&s3.HeadBucketInput{
-		Bucket: aws.String(logsBucketName),
+		Bucket: aws.String(conf.S3.BucketName),
 	})
 
 	// if there was an error, it is likely that the logs_bucket doesn't exist
@@ -156,33 +188,32 @@ func init() {
 				return
 			}
 		}
-		panic(err)
+		if awsError, ok := err.(awserr.Error); ok {
+			panic(awsError)
+		}
 	}
 
 	// bucketlister
 	rootLister = bucketlister.NewBucketLister(
-		logsBucketName,
+		conf.S3.BucketName,
 		"",
-		aws.NewConfig(),
+		sess.Config,
 	)
 }
 
 func main() {
 	// s3
-	uploader = s3manager.NewUploader(nil)
+	uploader = s3manager.NewUploader(sess)
 
-	// bone mux
-	// router := bone.New()
+	// gorilla mux
 	router := mux.NewRouter()
-	router.HandleFunc(".*[^\\.]", bucketlisterHandler).Methods("GET")
-	router.HandleFunc("^/.*\\.[^/]+$", testHandler).Methods("GET")
+	router.HandleFunc("/", rootLister.ServeHTTP).Methods("GET")
+	router.HandleFunc("/{dir}/", rootLister.ServeHTTP).Methods("GET")
+	router.HandleFunc("/{dir}/{file}", downloadFileHandler).Methods("GET")
 	router.HandleFunc("/", uploadHandler).Methods("POST")
 
 	// negroni
 	neg := negroni.Classic()
-
-	// middleware
-	neg.Use(negroni_gzip.Gzip(negroni_gzip.DefaultCompression))
 
 	// handlers
 	neg.UseHandler(router)
