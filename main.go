@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -10,43 +9,36 @@ import (
 	"net/http"
 	"time"
 
+	uuid "github.com/satori/go.uuid"
+	"gopkg.in/yaml.v2"
+
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"github.com/gorilla/mux"
-
-	"crypto/x509"
 
 	"github.com/codegangsta/negroni"
-	"github.com/milescrabill/mozldap"
+	"github.com/gorilla/mux"
+
 	bucketlister "github.com/milescrabill/product-delivery-tools/bucketlister/services"
-	uuid "github.com/satori/go.uuid"
-	"gopkg.in/yaml.v2"
+	util "github.com/milescrabill/webrtc_logging/util"
 )
 
 var sess *session.Session
 var s3Client *s3.S3
-var ldapClient mozldap.Client
-var uploader *s3manager.Uploader
-var rootLister *bucketlister.BucketLister
 var conf Config
 
 type Config struct {
-	Ldap struct {
-		Uri, Username, Password, ClientCertFile, ClientKeyFile, CaCertFile string
-		Insecure, Starttls                                                 bool
-	}
 	S3 struct {
 		BucketName, Region string
 	}
 	Server struct {
 		URI string
 	}
+	Ldap util.LdapConfig
 }
 
-func handleMultipartForm(req *http.Request, folderName string) (url string, err error) {
+func handleMultipartForm(req *http.Request, folderName string) (err error) {
 	// 24K allocated for files
 	const _24K = (1 << 20) * 24
 	if err = req.ParseMultipartForm(_24K); err != nil {
@@ -60,6 +52,7 @@ func handleMultipartForm(req *http.Request, folderName string) (url string, err 
 				return
 			}
 
+			uploader := s3manager.NewUploader(sess)
 			_, err = uploader.Upload(&s3manager.UploadInput{
 				Bucket:          aws.String(conf.S3.BucketName),
 				Key:             aws.String(fmt.Sprintf("%s/%s", folderName, header.Filename)),
@@ -71,8 +64,6 @@ func handleMultipartForm(req *http.Request, folderName string) (url string, err 
 			}
 		}
 	}
-	url = conf.Server.URI + folderName + "/"
-	log.Printf("upload success: %s", url)
 	return
 }
 
@@ -93,6 +84,27 @@ var downloadFileHandler = func(w http.ResponseWriter, req *http.Request) {
 	http.Redirect(w, req, presigned, 307)
 }
 
+func authenticationWrapper(fn http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		uid, pass := util.BasicAuth(req)
+
+		conf.Ldap.Username = "uid=" + uid + ",ou=" + conf.Ldap.Ou + ",dc=" + conf.Ldap.Dc
+		conf.Ldap.Password = pass
+
+		_, err := util.ConfigureLdapClient(conf.Ldap)
+		if err != nil {
+			log.Println(err.Error())
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm=%q`, "WebRTC Logs"))
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+
+		w.Header().Set("X-Authenticated-Username", uid)
+		log.Printf("successfully authenticated as %s\n", uid)
+		fn(w, req)
+	}
+}
+
 var uploadHandler = func(w http.ResponseWriter, req *http.Request) {
 	// generate uuid and time for folder name
 	id := uuid.NewV4()
@@ -100,25 +112,27 @@ var uploadHandler = func(w http.ResponseWriter, req *http.Request) {
 
 	folderName := timestamp + "-" + id.String()
 
-	url, err := handleMultipartForm(req, folderName)
+	err := handleMultipartForm(req, folderName)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Could not upload logs. Error: %s", err), http.StatusInternalServerError)
 	} else {
+		url := conf.Server.URI + folderName + "/"
+		log.Printf("upload success: %s", url)
 		fmt.Fprintln(w, url)
 	}
 }
 
-func init() {
+func main() {
 	flag.Parse()
 
 	if flag.NArg() != 1 {
-		log.Panic("Missing configuration path.")
+		log.Fatal("Missing configuration path.")
 	}
 
 	// load the local configuration file
 	fd, err := ioutil.ReadFile(flag.Arg(0))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err.Error())
 	}
 
 	// configuration object
@@ -127,90 +141,31 @@ func init() {
 		log.Fatalf("error: %v", err)
 	}
 
-	// import the client certificates
-	cert, err := tls.LoadX509KeyPair(conf.Ldap.ClientCertFile, conf.Ldap.ClientKeyFile)
-	if err != nil {
-		panic(err)
-	}
-
-	// import the ca cert
-	ca := x509.NewCertPool()
-	CAcert, err := ioutil.ReadFile(conf.Ldap.CaCertFile)
-	if err != nil {
-		panic(err)
-	}
-
-	if ok := ca.AppendCertsFromPEM(CAcert); !ok {
-		panic("failed to import CA Certificate")
-	}
-
-	tlsConfig := tls.Config{
-		Certificates:       []tls.Certificate{cert},
-		RootCAs:            ca,
-		InsecureSkipVerify: true,
-	}
-
-	// instantiate an ldap client
-	ldapClient, err = mozldap.NewClient(
-		conf.Ldap.Uri,
-		conf.Ldap.Username,
-		conf.Ldap.Password,
-		&tlsConfig,
-		conf.Ldap.Starttls)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Printf("connected %s on %s:%d, tls:%v starttls:%v\n", ldapClient.BaseDN, ldapClient.Host, ldapClient.Port, ldapClient.UseTLS, ldapClient.UseStartTLS)
 	sess = session.New(&aws.Config{Region: aws.String(conf.S3.Region)})
 
 	// s3
 	s3Client = s3.New(sess)
 
-	// check for logs_bucket existence
+	// check for logs bucket existence
 	_, err = s3Client.HeadBucket(&s3.HeadBucketInput{
 		Bucket: aws.String(conf.S3.BucketName),
 	})
-
-	// if there was an error, it is likely that the logs_bucket doesn't exist
 	if err != nil {
-		if reqErr, ok := err.(awserr.RequestFailure); ok {
-			// service error occurred
-			if reqErr.StatusCode() == 404 {
-				// bucket should be created in cloudformation, so this is obsolete
-				// bucket not found -> create the bucket
-				// _, err := s3Client.CreateBucket(&s3.CreateBucketInput{
-				// 	Bucket: aws.String(logsBucketName),
-				// })
-				// if err != nil {
-				// 	panic(err)
-				// }
-				return
-			}
-		}
-		if awsError, ok := err.(awserr.Error); ok {
-			panic(awsError)
-		}
+		log.Fatal(err.Error())
 	}
-
 	// bucketlister
-	rootLister = bucketlister.NewBucketLister(
+	lister := bucketlister.NewBucketLister(
 		conf.S3.BucketName,
 		"",
 		sess.Config,
 	)
-}
-
-func main() {
-	// s3
-	uploader = s3manager.NewUploader(sess)
 
 	// gorilla mux
 	router := mux.NewRouter()
-	router.HandleFunc("/", rootLister.ServeHTTP).Methods("GET")
-	router.HandleFunc("/{dir}/", rootLister.ServeHTTP).Methods("GET")
-	router.HandleFunc("/{dir}/{file}", downloadFileHandler).Methods("GET")
 	router.HandleFunc("/", uploadHandler).Methods("POST")
+	router.HandleFunc("/", authenticationWrapper(lister.ServeHTTP)).Methods("GET")
+	router.HandleFunc("/{dir}/", authenticationWrapper(lister.ServeHTTP)).Methods("GET")
+	router.HandleFunc("/{dir}/{file}", authenticationWrapper(downloadFileHandler)).Methods("GET")
 
 	// negroni
 	neg := negroni.Classic()
