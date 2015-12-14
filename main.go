@@ -45,6 +45,7 @@ func handleMultipartForm(req *http.Request, folderName string) (err error) {
 		return
 	}
 
+	uploader := s3manager.NewUploader(sess)
 	for _, fileHeaders := range req.MultipartForm.File {
 		for _, header := range fileHeaders {
 			var file multipart.File
@@ -52,7 +53,6 @@ func handleMultipartForm(req *http.Request, folderName string) (err error) {
 				return
 			}
 
-			uploader := s3manager.NewUploader(sess)
 			_, err = uploader.Upload(&s3manager.UploadInput{
 				Bucket:          aws.String(conf.S3.BucketName),
 				Key:             aws.String(fmt.Sprintf("%s/%s", folderName, header.Filename)),
