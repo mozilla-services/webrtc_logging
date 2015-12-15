@@ -95,7 +95,7 @@ func authenticationWrapper(fn http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		user, pass := util.BasicAuth(req)
 
-		// blank auth
+		// blank auth or first connection attempt
 		if user == "" || pass == "" {
 			unauthorizedHandler(w, req)
 			log.Println("blank authentication")
@@ -104,7 +104,7 @@ func authenticationWrapper(fn http.HandlerFunc) http.HandlerFunc {
 
 		// user not in allowed users
 		if _, ok := allowedUsers[user]; !ok {
-			log.Println("user not allowed")
+			log.Println(fmt.Sprintf("user %s is not an allowed user", user))
 			// reload allowed users
 			users, err := util.GetAllowedUsers(conf.Ldap, conf.AllowedGroups)
 			if err != nil {
