@@ -27,6 +27,7 @@ import (
 var sess *session.Session
 var s3Client *s3.S3
 var conf Config
+var allowedUsers map[string]bool
 
 type Config struct {
 	S3 struct {
@@ -35,7 +36,8 @@ type Config struct {
 	Server struct {
 		URI string
 	}
-	Ldap util.LdapConfig
+	AllowedGroups []string
+	Ldap          util.LdapConfig
 }
 
 func handleMultipartForm(req *http.Request, folderName string) (err error) {
@@ -84,23 +86,54 @@ var downloadFileHandler = func(w http.ResponseWriter, req *http.Request) {
 	http.Redirect(w, req, presigned, 307)
 }
 
+var unauthorizedHandler = func(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm=%q`, "WebRTC Logs"))
+	http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+}
+
 func authenticationWrapper(fn http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		uid, pass := util.BasicAuth(req)
+		user, pass := util.BasicAuth(req)
 
-		conf.Ldap.Username = "uid=" + uid + ",ou=" + conf.Ldap.Ou + ",dc=" + conf.Ldap.Dc
-		conf.Ldap.Password = pass
-
-		_, err := util.ConfigureLdapClient(conf.Ldap)
-		if err != nil {
-			log.Println(err.Error())
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm=%q`, "WebRTC Logs"))
-			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		// blank auth
+		if user == "" || pass == "" {
+			unauthorizedHandler(w, req)
+			log.Println("blank authentication")
 			return
 		}
 
-		w.Header().Set("X-Authenticated-Username", uid)
-		log.Printf("successfully authenticated as %s\n", uid)
+		// user not in allowed users
+		if _, ok := allowedUsers[user]; !ok {
+			log.Println("user not allowed")
+			// reload allowed users
+			users, err := util.GetAllowedUsers(conf.Ldap, conf.AllowedGroups)
+			if err != nil {
+				log.Fatalf("error: %s", err.Error())
+			}
+			allowedUsers = users
+
+			unauthorizedHandler(w, req)
+			return
+		}
+
+		// copy our ldap config but change username / password
+		// this verifies the user's credentials with the server
+		userLdapConf := conf.Ldap
+
+		userLdapConf.Username = user
+		userLdapConf.Password = pass
+
+		// attempt ldap connection using user creds
+		_, err := util.ConfigureLdapClient(userLdapConf)
+		if err != nil {
+			log.Println(err.Error())
+			unauthorizedHandler(w, req)
+			return
+		}
+
+		w.Header().Set("X-Authenticated-Username", user)
+		log.Printf("successfully authenticated as %s\n", user)
+
 		fn(w, req)
 	}
 }
@@ -138,7 +171,7 @@ func main() {
 	// configuration object
 	err = yaml.Unmarshal(fd, &conf)
 	if err != nil {
-		log.Fatalf("error: %v", err)
+		log.Fatalf("error: %s", err.Error())
 	}
 
 	sess = session.New(&aws.Config{Region: aws.String(conf.S3.Region)})
@@ -151,14 +184,24 @@ func main() {
 		Bucket: aws.String(conf.S3.BucketName),
 	})
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Fatalf("error: %s", err.Error())
 	}
+
 	// bucketlister
 	lister := bucketlister.NewBucketLister(
 		conf.S3.BucketName,
 		"",
 		sess.Config,
 	)
+
+	// initial allowed users
+	users, err := util.GetAllowedUsers(conf.Ldap, conf.AllowedGroups)
+	if err != nil {
+		log.Fatalf("error: %s", err.Error())
+	}
+	allowedUsers = users
+
+	log.Printf("allowed users: %v", allowedUsers)
 
 	// gorilla mux
 	router := mux.NewRouter()

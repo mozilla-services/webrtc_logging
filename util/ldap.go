@@ -10,8 +10,8 @@ import (
 )
 
 type LdapConfig struct {
-	Uri, Uid, Ou, Dc, Username, Password, ClientCertFile, ClientKeyFile, CaCertFile string
-	Insecure, Starttls                                                              bool
+	Uri, Username, Password, ClientCertFile, ClientKeyFile, CaCertFile string
+	Insecure, Starttls                                                 bool
 }
 
 func ConfigureLdapClient(conf LdapConfig) (*mozldap.Client, error) {
@@ -50,4 +50,26 @@ func ConfigureLdapClient(conf LdapConfig) (*mozldap.Client, error) {
 	}
 
 	return &ldapClient, nil
+}
+
+func GetAllowedUsers(config LdapConfig, groups []string) (map[string]bool, error) {
+	allowedUsers := make(map[string]bool)
+	lc, err := ConfigureLdapClient(config)
+	if err != nil {
+		return allowedUsers, err
+	}
+	users, err := lc.GetUsersInGroups(groups)
+	if err != nil {
+		return allowedUsers, err
+	}
+
+	for _, user := range users {
+		allowedUsers[user] = true
+	}
+
+	// TODO: temporary backdoor, GetAllowedUsers is only ever called
+	// with the LdapConfig of our app, not to attempt user logins
+	// so in theory this is secure
+	allowedUsers[config.Username] = true
+	return allowedUsers, nil
 }
