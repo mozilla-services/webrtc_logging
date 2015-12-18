@@ -66,10 +66,4 @@ func GetAllowedUsers(config LdapConfig, groups []string) (map[string]bool, error
 	for _, user := range users {
 		allowedUsers[user] = true
 	}
-
-	// TODO: temporary backdoor, GetAllowedUsers is only ever called
-	// with the LdapConfig of our app, not to attempt user logins
-	// so in theory this is secure
-	allowedUsers[config.Username] = true
-	return allowedUsers, nil
 }
