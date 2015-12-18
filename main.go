@@ -102,6 +102,20 @@ func authenticationWrapper(fn http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		// copy our ldap config but change username / password
+		// this verifies the user's credentials with the server
+		userLdapConf := conf.Ldap
+		userLdapConf.Username = user
+		userLdapConf.Password = pass
+
+		// attempt ldap connection using user creds
+		_, err := util.ConfigureLdapClient(userLdapConf)
+		if err != nil {
+			log.Println(err.Error())
+			unauthorizedHandler(w, req)
+			return
+		}
+
 		// user not in allowed users
 		if _, ok := allowedUsers[user]; !ok {
 			log.Println(fmt.Sprintf("user %s is not an allowed user", user))
@@ -112,21 +126,6 @@ func authenticationWrapper(fn http.HandlerFunc) http.HandlerFunc {
 			}
 			allowedUsers = users
 
-			unauthorizedHandler(w, req)
-			return
-		}
-
-		// copy our ldap config but change username / password
-		// this verifies the user's credentials with the server
-		userLdapConf := conf.Ldap
-
-		userLdapConf.Username = user
-		userLdapConf.Password = pass
-
-		// attempt ldap connection using user creds
-		_, err := util.ConfigureLdapClient(userLdapConf)
-		if err != nil {
-			log.Println(err.Error())
 			unauthorizedHandler(w, req)
 			return
 		}

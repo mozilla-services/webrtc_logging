@@ -35,7 +35,7 @@ func ConfigureLdapClient(conf LdapConfig) (*mozldap.Client, error) {
 	tlsConfig := tls.Config{
 		Certificates:       []tls.Certificate{cert},
 		RootCAs:            ca,
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: conf.Insecure,
 	}
 
 	// instantiate an ldap client
