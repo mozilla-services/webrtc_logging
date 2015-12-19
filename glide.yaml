@@ -3,7 +3,7 @@ import:
 - package: gopkg.in/ldap.v2
 - package: github.com/milescrabill/webrtc_logging
 - package: github.com/milescrabill/product-delivery-tools
-- package: github.com/milescrabill/mozldap
+- package: github.com/mozilla-services/mozldap
 - package: github.com/gorilla/context
 - package: github.com/codegangsta/negroni
 - package: github.com/jmespath/go-jmespath

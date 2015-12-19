@@ -8,7 +8,7 @@ import (
 	"regexp"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/milescrabill/mozldap"
+	"github.com/mozilla-services/mozldap"
 )
 
 type LdapConfig struct {
@@ -17,12 +17,6 @@ type LdapConfig struct {
 }
 
 func ConfigureLdapClient(conf LdapConfig) (*mozldap.Client, error) {
-	// import the client certificates
-	cert, err := tls.LoadX509KeyPair(conf.ClientCertFile, conf.ClientKeyFile)
-	if err != nil {
-		return nil, err
-	}
-
 	// import the ca cert
 	ca := x509.NewCertPool()
 	CAcert, err := ioutil.ReadFile(conf.CaCertFile)
@@ -35,8 +29,6 @@ func ConfigureLdapClient(conf LdapConfig) (*mozldap.Client, error) {
 	}
 
 	tlsConfig := tls.Config{
-		Certificates:       []tls.Certificate{cert},
-		RootCAs:            ca,
 		InsecureSkipVerify: conf.Insecure,
 	}
 
@@ -46,17 +38,17 @@ func ConfigureLdapClient(conf LdapConfig) (*mozldap.Client, error) {
 	}
 
 	// instantiate an ldap client
-	ldapClient, err := mozldap.NewClient(
+	ldapClient, err := mozldap.NewTLSClient(
 		conf.Uri,
 		conf.Username,
 		conf.Password,
+		conf.ClientCertFile,
+		conf.ClientKeyFile,
+		conf.CaCertFile,
 		&tlsConfig,
 		conf.Starttls)
-	if err != nil {
-		return nil, err
-	}
 
-	return &ldapClient, nil
+	return &ldapClient, err
 }
 
 func GetAllowedUsers(config LdapConfig, groups []string) (map[string]bool, error) {
