@@ -1,0 +1,56 @@
+hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+updated: 2015-12-19T07:46:56.546634248-08:00
+imports:
+- name: github.com/asaskevich/govalidator
+  version: 1a4bf7e7a98e6a6484254ac41c52ef20ec30814e
+- name: github.com/aws/aws-sdk-go
+  version: d4677067b535e7a06201ce491b41f4b73dcc73a9
+- name: github.com/codegangsta/cli
+  version: a889873af50a499d060097216dcdbcc26ed09e7c
+- name: github.com/codegangsta/negroni
+  version: c7477ad8e330bef55bf1ebe300cf8aa67c492d1b
+- name: github.com/go-ini/ini
+  version: 3c269131850c1675ec461a706c9a2a25bc2e0b10
+- name: github.com/golang/protobuf
+  version: 68415e7123da32b07eab49c96d2c4d6158360e9b
+- name: github.com/gorilla/context
+  version: 1c83b3eabd45b6d76072b66b746c20815fb2872d
+- name: github.com/gorilla/mux
+  version: 9c068cf16d982f8bd444b8c352acbeec34c4fe5b
+- name: github.com/jmespath/go-jmespath
+  version: 3433f3ea46d9f8019119e7dd41274e112a2359a9
+- name: github.com/lsegal/gucumber
+  version: e8116c9c66e641e9f81fc0a79fac923dfc646378
+- name: github.com/milescrabill/product-delivery-tools
+  version: 79e9ee9f38721795dc138c0252331d7b806600dd
+- name: github.com/mozilla-services/mozldap
+  version: fdcc809fb2e4bb1887a8bdb6103c363d2edd2fca
+- name: github.com/PagerDuty/godspeed
+  version: 079d1fb267ad66b7a3bd42c24013cbeb29698c3d
+- name: github.com/satori/go.uuid
+  version: d41af8bb6a7704f00bc3b7cba9355ae6a5a80048
+- name: github.com/shiena/ansicolor
+  version: a422bbe96644373c5753384a59d678f7d261ff10
+- name: github.com/stretchr/objx
+  version: 1a9d0bb9f541897e62256577b352fdbc1fb4fd94
+- name: github.com/stretchr/testify
+  version: 5ab65693f48b284b3f7a83114dd7b166b45f0193
+  subpackages:
+  - assert
+- name: golang.org/x/crypto
+  version: f18420efc3b4f8e9f3d51f6bd2476e92c46260e9
+- name: golang.org/x/net
+  version: 68a055e15f0ce90989da5564fd947fb72ce67513
+- name: golang.org/x/text
+  version: cf4986612c83df6c55578ba198316d1684a9a287
+- name: golang.org/x/tools
+  version: fa833fdef560f0fe9b40dbb37fd03030ac3d514b
+- name: google.golang.org/appengine
+  version: 58c0e2a2044a8d1abd8dd1d97939cd74497d0806
+- name: gopkg.in/asn1-ber.v1
+  version: 4e86f4367175e39f69d9358a5f17b4dda270378d
+- name: gopkg.in/ldap.v2
+  version: e9a325d64989e2844be629682cb085d2c58eef8d
+- name: gopkg.in/yaml.v2
+  version: f7716cbe52baa25d2e9b0d0da546fcf909fc16b4
+devImports: []
