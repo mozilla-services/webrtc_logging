@@ -87,8 +87,10 @@ var downloadFileHandler = func(w http.ResponseWriter, req *http.Request) {
 }
 
 var unauthorizedHandler = func(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm=%q`, "WebRTC Logs"))
-	http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+	w.WriteHeader(401)
+	w.Write([]byte("Unauthorized"))
 }
 
 func authenticationWrapper(fn http.HandlerFunc) http.HandlerFunc {
@@ -150,7 +152,7 @@ var uploadHandler = func(w http.ResponseWriter, req *http.Request) {
 	} else {
 		url := conf.Server.URI + folderName + "/"
 		log.Printf("upload success: %s", url)
-		fmt.Fprintln(w, url)
+		w.Write([]byte(url))
 	}
 }
 

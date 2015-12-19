@@ -4,22 +4,18 @@ import (
 	"bytes"
 	"encoding/base64"
 	"net/http"
-	"strings"
 )
 
 func BasicAuth(r *http.Request) (user, pass string) {
-	// ripped out of httpauth library
-	const basicScheme string = "Basic "
-
 	// Confirm the request is sending Basic Authentication credentials.
 	auth := r.Header.Get("Authorization")
-	if !strings.HasPrefix(auth, basicScheme) {
+	if len(auth) < 8 || auth[0:6] != "Basic " {
 		return
 	}
 
 	// Get the plain-text username and password from the request
 	// The first six characters are skipped - e.g. "Basic ".
-	str, err := base64.StdEncoding.DecodeString(auth[len(basicScheme):])
+	str, err := base64.StdEncoding.DecodeString(auth[6:])
 	if err != nil {
 		return
 	}
