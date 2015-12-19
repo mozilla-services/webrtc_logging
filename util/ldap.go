@@ -5,13 +5,15 @@ import (
 	"crypto/x509"
 	"io/ioutil"
 	"log"
+	"regexp"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/milescrabill/mozldap"
 )
 
 type LdapConfig struct {
-	Uri, Username, Password, ClientCertFile, ClientKeyFile, CaCertFile string
-	Insecure, Starttls                                                 bool
+	Uri, Username, Password, ClientCertFile, ClientKeyFile, CaCertFile, Dc string
+	Insecure, Starttls                                                     bool
 }
 
 func ConfigureLdapClient(conf LdapConfig) (*mozldap.Client, error) {
@@ -38,6 +40,11 @@ func ConfigureLdapClient(conf LdapConfig) (*mozldap.Client, error) {
 		InsecureSkipVerify: conf.Insecure,
 	}
 
+	// check if ldap email was entered
+	if govalidator.IsEmail(conf.Username) {
+		conf.Username = "mail=" + conf.Username + ",o=com,dc=" + conf.Dc
+	}
+
 	// instantiate an ldap client
 	ldapClient, err := mozldap.NewClient(
 		conf.Uri,
@@ -62,9 +69,10 @@ func GetAllowedUsers(config LdapConfig, groups []string) (map[string]bool, error
 	if err != nil {
 		return allowedUsers, err
 	}
-
 	for _, user := range users {
-		allowedUsers[user] = true
+		// get only the email address
+		email := regexp.MustCompile("[^=]+=([^,]+),.*").FindStringSubmatch(user)[1]
+		allowedUsers[email] = true
 	}
 
 	return allowedUsers, nil
