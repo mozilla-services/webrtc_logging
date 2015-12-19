@@ -66,4 +66,6 @@ func GetAllowedUsers(config LdapConfig, groups []string) (map[string]bool, error
 	for _, user := range users {
 		allowedUsers[user] = true
 	}
+
+	return allowedUsers, nil
 }

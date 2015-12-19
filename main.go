@@ -118,7 +118,7 @@ func authenticationWrapper(fn http.HandlerFunc) http.HandlerFunc {
 
 		// user not in allowed users
 		if _, ok := allowedUsers[user]; !ok {
-			log.Println(fmt.Sprintf("user %s is not an allowed user", user))
+			log.Println("user " + user + " is not an allowed user")
 			// reload allowed users
 			users, err := util.GetAllowedUsers(conf.Ldap, conf.AllowedGroups)
 			if err != nil {
