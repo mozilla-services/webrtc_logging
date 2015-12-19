@@ -2,9 +2,6 @@ package util
 
 import (
 	"crypto/tls"
-	"crypto/x509"
-	"io/ioutil"
-	"log"
 	"regexp"
 
 	"github.com/asaskevich/govalidator"
@@ -17,21 +14,6 @@ type LdapConfig struct {
 }
 
 func ConfigureLdapClient(conf LdapConfig) (*mozldap.Client, error) {
-	// import the ca cert
-	ca := x509.NewCertPool()
-	CAcert, err := ioutil.ReadFile(conf.CaCertFile)
-	if err != nil {
-		return nil, err
-	}
-
-	if ok := ca.AppendCertsFromPEM(CAcert); !ok {
-		log.Fatal("failed to import CA Certificate")
-	}
-
-	tlsConfig := tls.Config{
-		InsecureSkipVerify: conf.Insecure,
-	}
-
 	// check if ldap email was entered
 	if govalidator.IsEmail(conf.Username) {
 		conf.Username = "mail=" + conf.Username + ",o=com,dc=" + conf.Dc
@@ -45,8 +27,10 @@ func ConfigureLdapClient(conf LdapConfig) (*mozldap.Client, error) {
 		conf.ClientCertFile,
 		conf.ClientKeyFile,
 		conf.CaCertFile,
-		&tlsConfig,
-		conf.Starttls)
+		&tls.Config{
+			InsecureSkipVerify: conf.Insecure,
+		},
+	)
 
 	return &ldapClient, err
 }
