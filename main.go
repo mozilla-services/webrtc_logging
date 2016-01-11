@@ -42,7 +42,7 @@ type Config struct {
 
 func handleMultipartForm(req *http.Request, folderName string) (err error) {
 	// 24K allocated for files
-	const _24K = (1 << 20) * 24
+	const _24K = (1 << 24) * 24
 	if err = req.ParseMultipartForm(_24K); err != nil {
 		return
 	}
@@ -56,10 +56,9 @@ func handleMultipartForm(req *http.Request, folderName string) (err error) {
 			}
 
 			_, err = uploader.Upload(&s3manager.UploadInput{
-				Bucket:          aws.String(conf.S3.BucketName),
-				Key:             aws.String(fmt.Sprintf("%s/%s", folderName, header.Filename)),
-				Body:            file,
-				ContentEncoding: aws.String("gzip"),
+				Bucket: aws.String(conf.S3.BucketName),
+				Key:    aws.String(fmt.Sprintf("%s/%s", folderName, header.Filename)),
+				Body:   file,
 			})
 			if err != nil {
 				return
