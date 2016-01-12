@@ -41,9 +41,9 @@ type Config struct {
 }
 
 func handleMultipartForm(req *http.Request, folderName string) (err error) {
-	// 24K allocated for files
-	const _24K = (1 << 24) * 24
-	if err = req.ParseMultipartForm(_24K); err != nil {
+	// 10MB allocated for files
+	const _10mb = (1 << 22) * 24
+	if err = req.ParseMultipartForm(_10); err != nil {
 		return
 	}
 
